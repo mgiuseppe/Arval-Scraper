@@ -6,20 +6,21 @@ import requests
 import sys
 
 class CarDetail:
-    def __init__(self, img_url, name, engine_size, fuel_type, power, max_torque, certification,
+    def __init__(self, brand, img_url, name, engine_size, fuel_type, power, max_torque, certification,
             length, width, height, weight, boot_space, urban_cons, extra_cons,
             combined_cons, co2, monthly_cost, fringe_benefit):
-        self.img_url, self.name, self.engine_size, self.fuel_type, self.power = img_url, name, engine_size, fuel_type, power
+        self.brand, self.img_url, self.name, self.engine_size, self.fuel_type, self.power = brand, img_url, name, engine_size, fuel_type, power
         self.max_torque, self.certification, self.length, self.width = max_torque, certification, length, width
         self.weight, self.boot_space, self.urban_cons, self.extra_cons = weight, boot_space, urban_cons, extra_cons
         self.combined_cons, self.co2, self.monthly_cost, self.fringe_benefit = combined_cons, co2, monthly_cost, fringe_benefit
         # compute total_monthly_price
         # 0.3 is the most common taxable_percentage, so if no co2 is defined i'll use 0.3
-        benefit_taxable_percentage = 0.3 if not co2 else 0.5 if float(co2) > 190 else 0.4 if float(co2) > 160 else 0.3 if float(co2) > 60 else 0.25
-        monthly_cost_float = float(monthly_cost.replace(",",".") or "0")
-        fringe_benefit_float = float(fringe_benefit.replace(",",".") or "0")
-        self.benefit_taxable_percentage = str(benefit_taxable_percentage)
-        self.total_monthly_price = str(monthly_cost_float + fringe_benefit_float * benefit_taxable_percentage)
+        # benefit_taxable_percentage = 0.3 if not co2 else 0.5 if float(co2) > 190 else 0.4 if float(co2) > 160 else 0.3 if float(co2) > 60 else 0.25
+        # self.benefit_taxable_percentage = str(benefit_taxable_percentage)
+        monthly_cost_float = float(monthly_cost.replace(".","").replace(",",".") or "0")
+        fringe_benefit_float = float(fringe_benefit.replace(".","").replace(",",".") or "0")
+        irpef_percentage = 0.38
+        self.total_monthly_price = str(monthly_cost_float + (fringe_benefit_float - monthly_cost_float) * irpef_percentage)
 
     def to_csv_header(self):
         csv_header = ""
@@ -58,7 +59,7 @@ def get_car_urls(session, url):
 def extract_car_feature(car_features, num):
     return car_features[num].find("dd").text.strip().replace("N.D.","")
 
-def scrape_car_detail(session, url, base_url, url_costs):
+def scrape_car_detail(session, url, base_url, url_costs, brand):
     page = session.get(url)
     soup = BeautifulSoup(page.content, "html.parser")
 
@@ -89,7 +90,7 @@ def scrape_car_detail(session, url, base_url, url_costs):
     monthly_cost = costs_soup.find_all("dl")[0].find("dd").text.strip()[2:]
     fringe_benefit = costs_soup.find_all("dl")[-1].find("dd").text.strip()[2:]
 
-    return CarDetail(img_url, name, engine_size, fuel_type, power, max_torque, certification,
+    return CarDetail(brand, img_url, name, engine_size, fuel_type, power, max_torque, certification,
                      length, width, height, weight, boot_space, urban_cons, extra_cons, 
                      combined_cons, co2, monthly_cost, fringe_benefit)
 
@@ -121,9 +122,10 @@ def main():
     # scrape
     print("scraping home")
     for url_brand in get_brand_urls(s, url_home):
-        print(f"scraping brand: {url_brand.split('=')[-1]}")
+        brand_name = url_brand.split('=')[-1]
+        print(f"scraping brand: {brand_name}")
         for url_car in get_car_urls(s, url_home + url_brand):
-            car_details.append(scrape_car_detail(s, url_home + url_car, url_home, url_costs))
+            car_details.append(scrape_car_detail(s, url_home + url_car, url_home, url_costs, brand_name))
     
     # export result to csv
     write_file("cars.csv", car_details)
